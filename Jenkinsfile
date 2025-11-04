@@ -4,6 +4,8 @@ pipeline {
     environment {
         FRONTEND_IMAGE = "react_frontend"
         BACKEND_IMAGE  = "node_backend"
+        SONAR_AUTH_TOKEN = credentials('SONAR_AUTH_TOKEN')
+        SONAR_URL = "http://sonar:9000"   // 👉 Use EC2 IP if SonarQube not in Docker
     }
 
     stages {
@@ -27,13 +29,13 @@ pipeline {
                 sh '''
                 echo "Stopping and removing old containers..."
                 docker ps -a --filter "name=${FRONTEND_IMAGE}" --format "{{.ID}}" | xargs -r docker stop
-                docker ps -a --filter "name=${BACKEND_IMAGE}" --format "{{.ID}}" | xargs -r docker stop
+                docker ps -a --filter "name=${BACKEND_IMAGE}"  --format "{{.ID}}" | xargs -r docker stop
                 docker ps -a --filter "name=${FRONTEND_IMAGE}" --format "{{.ID}}" | xargs -r docker rm
-                docker ps -a --filter "name=${BACKEND_IMAGE}" --format "{{.ID}}" | xargs -r docker rm
+                docker ps -a --filter "name=${BACKEND_IMAGE}"  --format "{{.ID}}" | xargs -r docker rm
 
                 echo "Removing old images..."
                 docker images -q ${FRONTEND_IMAGE} | xargs -r docker rmi -f
-                docker images -q ${BACKEND_IMAGE} | xargs -r docker rmi -f
+                docker images -q ${BACKEND_IMAGE}  | xargs -r docker rmi -f
                 '''
             }
         }
@@ -52,7 +54,29 @@ pipeline {
         }
 
         /* -------------------------
-         🧠 Stage 4: NPM Audit (Dependency Scan)
+         🔍 Stage 4: SonarQube Scan (No Quality Gate)
+        ------------------------- */
+        stage('SonarQube Scan') {
+            steps {
+                script {
+                    echo "🔍 Running SonarQube static code analysis..."
+                    def scannerHome = tool 'SonarScanner'
+                    withSonarQubeEnv('MySonarQube') {
+                        sh """
+                        export PATH=$PATH:/usr/bin
+                        node -v
+                        ${scannerHome}/bin/sonar-scanner \
+                          -Dproject.settings=sonar-project.properties \
+                          -Dsonar.host.url=${SONAR_URL} \
+                          -Dsonar.login=$SONAR_AUTH_TOKEN
+                        """
+                    }
+                }
+            }
+        }
+
+        /* -------------------------
+         🧠 Stage 5: NPM Audit (Dependency Scan)
         ------------------------- */
         stage('NPM Audit Scan') {
             steps {
@@ -70,20 +94,23 @@ pipeline {
         }
 
         /* -------------------------
-         🧰 Stage 5: Trivy Image Scan
+         🧰 Stage 6: Trivy Image Scan
         ------------------------- */
         stage('Trivy Image Scan') {
             steps {
                 echo "🔎 Scanning Docker images for vulnerabilities using Trivy..."
                 sh '''
+                echo "Scanning Frontend image..."
                 trivy image --severity HIGH,CRITICAL ${FRONTEND_IMAGE} || true
+
+                echo "Scanning Backend image..."
                 trivy image --severity HIGH,CRITICAL ${BACKEND_IMAGE} || true
                 '''
             }
         }
 
         /* -------------------------
-         🚀 Stage 6: Run Containers
+         🚀 Stage 7: Run Containers
         ------------------------- */
         stage('Run Containers') {
             steps {
@@ -96,14 +123,14 @@ pipeline {
         }
 
         /* -------------------------
-         ✅ Stage 7: Verify Deployment
+         ✅ Stage 8: Verify Deployment
         ------------------------- */
         stage('Verify Deployment') {
             steps {
                 echo "✅ Checking container status..."
                 sh '''
-                docker ps | grep ${FRONTEND_IMAGE} || echo "Frontend container not found!"
-                docker ps | grep ${BACKEND_IMAGE} || echo "Backend container not found!"
+                docker ps | grep ${FRONTEND_IMAGE} && echo "✅ Frontend container is running!" || echo "❌ Frontend not found!"
+                docker ps | grep ${BACKEND_IMAGE}  && echo "✅ Backend container is running!" || echo "❌ Backend not found!"
                 '''
             }
         }
@@ -117,7 +144,7 @@ pipeline {
             echo "🏁 Pipeline finished — cleaning workspace..."
         }
         success {
-            echo "✅ Docker images built, scanned, and deployed successfully! 🔒"
+            echo "✅ DevSecOps pipeline executed successfully! 🚀"
         }
         failure {
             echo "❌ Pipeline failed. Check Jenkins logs for errors."
