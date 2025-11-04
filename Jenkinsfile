@@ -5,7 +5,7 @@ pipeline {
         FRONTEND_IMAGE = "react_frontend"
         BACKEND_IMAGE  = "node_backend"
         SONAR_AUTH_TOKEN = credentials('SONAR_AUTH_TOKEN')
-        SONAR_URL = "http://sonar:9000"   // 👉 Use EC2 IP if SonarQube not in Docker
+        SONAR_URL = "http://3.110.205.36/:9000"   // 👉 Use EC2 IP if SonarQube not in Docker
     }
 
     stages {
