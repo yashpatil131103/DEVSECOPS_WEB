@@ -5,7 +5,7 @@ pipeline {
         FRONTEND_IMAGE = "react_frontend"
         BACKEND_IMAGE  = "node_backend"
         SONAR_AUTH_TOKEN = credentials('SONAR_AUTH_TOKEN')
-        SONAR_URL = "http://3.110.205.36/:9000"   // 👉 Use EC2 IP if SonarQube not in Docker
+        SONAR_URL = "http://3.110.205.36:9000"   // ✅ fixed: no slash before :9000
     }
 
     stages {
@@ -59,14 +59,15 @@ pipeline {
         stage('SonarQube Scan') {
             steps {
                 script {
-                    echo "🔍 Running SonarQube static code analysis..."
+                    echo "🔍 Running SonarQube analysis..."
                     def scannerHome = tool 'SonarScanner'
                     withSonarQubeEnv('MySonarQube') {
                         sh """
                         export PATH=$PATH:/usr/bin
                         node -v
                         ${scannerHome}/bin/sonar-scanner \
-                          -Dproject.settings=sonar-project.properties \
+                          -Dsonar.projectKey=devsecops-web \
+                          -Dsonar.sources=. \
                           -Dsonar.host.url=${SONAR_URL} \
                           -Dsonar.login=$SONAR_AUTH_TOKEN
                         """
