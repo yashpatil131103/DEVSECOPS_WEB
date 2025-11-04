@@ -3,11 +3,14 @@ pipeline {
 
     environment {
         FRONTEND_IMAGE = "react_frontend"
-        BACKEND_IMAGE = "node_backend"
+        BACKEND_IMAGE  = "node_backend"
     }
 
     stages {
 
+        /* -------------------------
+         🧱 Stage 1: Git Clone
+        ------------------------- */
         stage('Git Clone') {
             steps {
                 echo "📦 Cloning repository..."
@@ -15,6 +18,9 @@ pipeline {
             }
         }
 
+        /* -------------------------
+         🧹 Stage 2: Cleanup Old Containers & Images
+        ------------------------- */
         stage('Cleanup Old Containers & Images') {
             steps {
                 echo "🧹 Cleaning up old containers and images if they exist..."
@@ -32,6 +38,9 @@ pipeline {
             }
         }
 
+        /* -------------------------
+         ⚙️ Stage 3: Build Docker Images
+        ------------------------- */
         stage('Build Docker Images') {
             steps {
                 echo "⚙️ Building new Docker images using docker-compose..."
@@ -42,6 +51,40 @@ pipeline {
             }
         }
 
+        /* -------------------------
+         🧠 Stage 4: NPM Audit (Dependency Scan)
+        ------------------------- */
+        stage('NPM Audit Scan') {
+            steps {
+                echo "📦 Running npm audit on frontend and backend..."
+                sh '''
+                cd frontend
+                npm install --legacy-peer-deps || true
+                npm audit --audit-level=high || true
+
+                cd ../backend
+                npm install --legacy-peer-deps || true
+                npm audit --audit-level=high || true
+                '''
+            }
+        }
+
+        /* -------------------------
+         🧰 Stage 5: Trivy Image Scan
+        ------------------------- */
+        stage('Trivy Image Scan') {
+            steps {
+                echo "🔎 Scanning Docker images for vulnerabilities using Trivy..."
+                sh '''
+                trivy image --severity HIGH,CRITICAL ${FRONTEND_IMAGE} || true
+                trivy image --severity HIGH,CRITICAL ${BACKEND_IMAGE} || true
+                '''
+            }
+        }
+
+        /* -------------------------
+         🚀 Stage 6: Run Containers
+        ------------------------- */
         stage('Run Containers') {
             steps {
                 echo "🚀 Running new containers..."
@@ -52,6 +95,9 @@ pipeline {
             }
         }
 
+        /* -------------------------
+         ✅ Stage 7: Verify Deployment
+        ------------------------- */
         stage('Verify Deployment') {
             steps {
                 echo "✅ Checking container status..."
@@ -63,12 +109,15 @@ pipeline {
         }
     }
 
+    /* -------------------------
+       📦 Post-build Summary
+    ------------------------- */
     post {
         always {
             echo "🏁 Pipeline finished — cleaning workspace..."
         }
         success {
-            echo "✅ Docker images built and containers running successfully!"
+            echo "✅ Docker images built, scanned, and deployed successfully! 🔒"
         }
         failure {
             echo "❌ Pipeline failed. Check Jenkins logs for errors."
